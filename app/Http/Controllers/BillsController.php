@@ -14,6 +14,8 @@ use App\Http\Components\Mailer\Mailer;
 use App\Http\Components\Mailer\Message;
 use App\Http\Controllers\ObserversController;
 use Porabote\Auth\Auth;
+use App\Http\Components\AccessLists;
+use App\Models\HistoryLocal;
 
 class BillsController extends Controller
 {
@@ -55,14 +57,14 @@ class BillsController extends Controller
     }
 
     /*
-  * ACCEPT LIST
-  * */
+     * ACCEPT LIST
+     * */
     function getAcceptListMode($request)
     {
         $data = $request->all();
-        $record = Certificates::find($data['foreignKey']);
+        $record = Bills::find($data['foreignKey']);
 
-        $mode = (in_array($record->status_id, ['36', '39']))  ? 'building' : 'signing';
+        $mode = (in_array($record->status_id, ['23', '26']))  ? 'building' : 'signing';
         $isCanChangeAcceptor = AccessLists::_check(10);
 
         return response()->json([
@@ -93,22 +95,26 @@ class BillsController extends Controller
 
     function setAcceptorsCallback($id)
     {
-        $record = Certificates::with('steps')->find($id);
+        $record = Bills::with('steps')->find($id);
 
         $isAllAccepted = true;
+        $acceptor = null;
         foreach($record['steps'] as $step) {
             if (!$step['acceptor']['accepted_at']) {
                 $isAllAccepted = false;
+                $acceptor = $step['acceptor'];
                 break;
             }
         }
 
         if ($isAllAccepted) {
-            $record->status_id = 38;
+            $record->status_id = 25;
+            $record->who_sign_queue_id = null;
             $record->update();
             return $this->notifyAboutAccepting($id);
         } else {
-            $record->status_id = 37;
+            $record->status_id = 24;
+            $record->who_sign_queue_id = $acceptor['user_id'];
             $record->update();
             return $this->notifyNextSigner($id);
         }
@@ -116,12 +122,13 @@ class BillsController extends Controller
 
     function declineStepCallback($id, $data)
     {
-        $record = Certificates::find($id);
-        $record->status_id = 39;
+        $record = Bills::find($id);
+        $record->status_id = 26;
+        $record->who_sign_queue_id = null;
         $record->update();
 
         HistoryLocal::create([
-            'model_alias' => 'Certificates',
+            'model_alias' => 'Bills',
             'record_id' => $record->id,
             'msg' => 'Подпись отклонена. Причина: ' . $data['comment']
         ]);
@@ -131,8 +138,11 @@ class BillsController extends Controller
 
     function notifyNextSigner($id)
     {
-        $data = Certificates::with('steps.acceptor.api_user')
+        $data = Bills::with('steps.acceptor.api_user')
             ->with('user')
+            ->with('object')
+            ->with('contractor')
+            ->with('client')
             ->find($id)
             ->toArray();
         $data['record'] = $data;
@@ -151,7 +161,7 @@ class BillsController extends Controller
         $message = new Message();
         $message
             ->setData($data)
-            ->setTemplateById(18);
+            ->setTemplateById(10);
 
         Mailer::setTo([
             [$nextSigner['email']]
@@ -161,8 +171,11 @@ class BillsController extends Controller
 
     function notifyAboutAccepting($id)
     {
-        $data = Certificates::with('steps.acceptor.api_user')
+        $data = Bills::with('steps.acceptor.api_user')
             ->with('user')
+            ->with('object')
+            ->with('contractor')
+            ->with('client')
             ->find($id)
             ->toArray();
         $data['record'] = $data;
@@ -177,7 +190,7 @@ class BillsController extends Controller
         $message = new Message();
         $message
             ->setData($data)
-            ->setTemplateById(20);
+            ->setTemplateById(11);
 
         Mailer::setTo($recipients);
         Mailer::send($message);
@@ -185,8 +198,11 @@ class BillsController extends Controller
 
     function notifyAboutDeclining($id, $dataRequest)
     {
-        $data = Certificates::with('steps.acceptor.api_user')
+        $data = Bills::with('steps.acceptor.api_user')
             ->with('user')
+            ->with('object')
+            ->with('contractor')
+            ->with('client')
             ->find($id)
             ->toArray();
         $data['record'] = $data;
@@ -203,7 +219,7 @@ class BillsController extends Controller
         $message = new Message();
         $message
             ->setData($data)
-            ->setTemplateById(19);
+            ->setTemplateById(17);
 
         Mailer::setTo($recipients);
         Mailer::send($message);
@@ -211,8 +227,27 @@ class BillsController extends Controller
 
     function changeAcceptorCallback($id, $data)
     {
+        $record = Bills::with('steps.acceptor.api_user')
+            ->find($id);
+
+        $isAllAccepted = true;
+        $acceptor = null;
+        foreach($record['steps'] as $step) {
+            if (!$step['acceptor']['accepted_at']) {
+                $isAllAccepted = false;
+                $acceptor = $step['acceptor'];
+                break;
+            }
+        }
+
+        if (!$isAllAccepted) {
+            $record->department_now_id = $acceptor['api_user']['department_id'];
+            $record->who_sign_queue_id = $acceptor['user_id'];
+            $record->update();
+        }
+
         HistoryLocal::create([
-            'model_alias' => 'Certificates',
+            'model_alias' => 'Bills',
             'record_id' => $id,
             'msg' => 'Изменён подписант с ' . $data['oldStep']['acceptor']['api_user']['name'] . ' на ' .$data['newStep']['acceptor']['api_user']['name']
         ]);

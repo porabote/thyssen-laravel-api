@@ -7,36 +7,64 @@ use Illuminate\Support\Facades\DB;
 use Porabote\FullRestApi\Server\ApiTrait;
 use Porabote\Uploader\Uploader;
 use App\Models\File;
+use App\Models\Files;
 use App\Models\History;
 
 class FilesController extends Controller
 {
     use ApiTrait;
 
+    static $authAllows;
+    private $authData = [];
+
+    function __construct()
+    {
+        self::$authAllows = [
+            'importLocalFiles',
+            'tmpSetSizes'
+        ];
+    }
+    
     function upload(Request $request)
     {
         $data = $request->all();
 
-        if (isset($data['files'])) {
+        try {
 
-            $files = [];
+            if (isset($data['files'])) {
 
-            foreach ($data['files'] as $item) {
-                $File = $item['file'];
-                unset($item['file']);
-                $files[] = $this->uploadFile($File, $item);
+                $files = [];
+
+                foreach ($data['files'] as $item) {
+                    $File = $item['file'];
+                    unset($item['file']);
+                    $files[] = self::uploadFile($File, $item);
+                }
+
+                return response()->json([
+                    'data' => $files,
+                    'meta' => []
+                ]);
+
+            } elseif (isset($data['file'])) {
+
+                $File = $data['file'];
+                unset($data['file']);
+                $file = self::uploadFile($File, $data);
+
+                return response()->json([
+                    'data' => $file,
+                    'meta' => []
+                ]);
             }
 
-            return response()->json([
-                'data' => $files,
-                'meta' => []
-            ]);
+        } catch (Exception $e) {
 
         }
 
     }
 
-    function uploadFile($file, $fileInfo)
+    static function uploadFile($file, $fileInfo)
     {
         $file = Uploader::upload($file);
 
@@ -45,7 +73,7 @@ class FilesController extends Controller
         File::create($file);
 
         History::create([
-            'model_alias' => 'reports',
+            'model_alias' => $fileInfo['model_alias'],
             'record_id' => $file['record_id'],
             'msg' => 'Загружен файл: ' . $file['basename']
         ]);
@@ -69,6 +97,22 @@ class FilesController extends Controller
         ]);
     }
 
+    function editDescription(Request $request, $id)
+    {
+        $data = $request->all();
+
+        $file = File::find($id);
+        foreach ($data as $fieldName => $value) {
+            $file->$fieldName = $value;
+        }
+        $file->update();
+
+        return response()->json([
+            'data' => $file,
+            'meta' => []
+        ]);
+    }
+    
     function markToDelete($request, $id)
     {
         $file = File::find($id);
@@ -79,5 +123,40 @@ class FilesController extends Controller
             'data' => $file,
             'meta' => []
         ]);
+    }
+    
+    function importLocalFiles()
+    {
+        $user = new \stdClass();
+        $user->account_alias = 'Solikamsk';//Thyssen   Solikamsk
+        \Porabote\Auth\Auth::setUser($user);
+
+        $files = Files::where('model_alias', 'App.BusinessRequests')->get()->toArray();
+
+       // echo 89;
+        foreach($files as $file) {
+            $file['model_alias'] = 'PaymentsRequests';
+            $file['account_id'] = 3;
+
+           // File::create($file);
+           // debug($file);
+        }
+    }
+
+    function tmpSetSizes()
+    {
+        $files = File::where('model_alias', 'PaymentsRequests')->get();
+        foreach ($files as $file) {
+            if (file_exists($file['path'])) {
+
+//                copy(
+//                    $file['path'],
+//                    '/var/www/www-root/data/www/api.v2.thyssen24.ru/storage/upload/payments-requests/' . $file['basename']
+//                );
+                $file['uri'] = '/upload/payments-requests/' . basename($file['uri']);
+              //  $file['account_id'] = 4;
+               // $file->update();
+            }
+        }
     }
 }

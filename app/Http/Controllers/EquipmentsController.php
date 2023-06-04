@@ -288,6 +288,18 @@ class EquipmentsController extends Controller
         ]);
     }
 
+    function excelInsertImage($path, $spreadsheet, $coordinates, $width, $height)
+    {
+        $drawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+        $drawing->setName('Image');
+        $drawing->setDescription('Image');
+        $drawing->setPath($path); // put your path and image here
+        $drawing->setWidth($width);
+        $drawing->setResizeProportional(true);
+        $drawing->setCoordinates($coordinates);
+        $drawing->setWorksheet($spreadsheet);
+    }
+
     function exportToExcel($response)
     {
         $alphabet = range('A', 'Z');
@@ -296,12 +308,14 @@ class EquipmentsController extends Controller
             ->with('equipment_repairs.spares')
             ->with('equipment_repairs.spares.spare')
             ->with('equipment_repairs.user')
+            ->with('equipment_repairs.type')
             ->with('equipment_accidents')
-            ->with('organizations_own')
+            ->with('organizations_own.logo')
             ->with('object')
             ->with('object.platform')
             ->with('type')
             ->with('status')
+            ->with('cover')
             ->with('status_reason')
             ->find($response->query('id'))->toArray();
 
@@ -346,6 +360,25 @@ class EquipmentsController extends Controller
         $sheet->setCellValue('B13', date('d-m-Y', strtotime($data['operation_start'])));
         $sheet->setCellValue('B14', $data['status']['name']);
         $sheet->setCellValue('B15', $data['status_reason']['name']);
+        //Изображения в общих данных
+        if ($data['organizations_own']['logo']) {
+            $this->excelInsertImage(
+                $data['organizations_own']['logo']['path'],
+                $sheet,
+                'E5',
+                290,
+                65
+            );
+        }
+        if ($data['cover']) {
+            $this->excelInsertImage(
+                $data['cover']['path'],
+                $sheet,
+                'C11',
+                440,
+                370
+            );
+        }
 
         // Часы
         $sheet = $spreadsheet->getSheet(1);
@@ -357,6 +390,13 @@ class EquipmentsController extends Controller
                 $sheet->setCellValue($alphabet[intval($month)] . $row, $value);
             }
             $sheet->getStyle('A' . $row . ':M' . $row)->applyFromArray($styleArray);
+            if ($row % 2 === 0) {
+                $sheet->getStyle('A' . $row . ':M' . $row)->getFill()
+                    ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                    ->getStartColor()
+                    ->setARGB('d6d8da');
+            }
+
             $row++;
         }
         $sheet->setCellValue('A' . $row, 'Итого');
@@ -367,7 +407,7 @@ class EquipmentsController extends Controller
         // debug($data['equipment_repairs']);exit();
         // ТО, ремонт
         $sheet = $spreadsheet->getSheet(2);
-        $row = 7;
+        $row = 5;
         $types = ['' => 'Не указано', 'to' => 'Технический осмотр', 'repair' => 'Ремонт'];
 
         foreach ($data['equipment_repairs'] as $repair) {
@@ -376,13 +416,13 @@ class EquipmentsController extends Controller
             $dateStart = new \DateTime($repair['date_at']);
             $dateEnd = $dateStart->modify('+' . ceil($downtimeDays) . ' days');
 
-            $sheet->setCellValue('A' . $row, $types[$repair['type']]);
+            $sheet->setCellValue('A' . $row, $repair['type']['name']);
             $sheet->setCellValue('B' . $row, $repair['engine_hours']);
             $sheet->setCellValue('C' . $row, date('d-m-Y', strtotime($repair['date_at'])));
             $sheet->setCellValue('D' . $row, $dateEnd->format('d-m-Y'));
             $sheet->setCellValue('E' . $row, $repair['downtime']);
             $sheet->setCellValue('F' . $row, $repair['desc_short']);
-            $sheet->setCellValue('J' . $row, $repair['user']['name'] . '( ' . $repair['user']['post_name'] . ' )');
+            $sheet->setCellValue('J' . $row, $repair['user']['name'] . ' ( ' . $repair['user']['post_name'] . ' )');
 //debug($data);exit();
             foreach ($repair['spares'] as $node) {
                 $sheet->setCellValue('G' . $row, $node['spare']['name']);
@@ -397,7 +437,7 @@ class EquipmentsController extends Controller
 
         // Аварии
         $sheet = $spreadsheet->getSheet(3);
-        $row = 4;
+        $row = 3;
         foreach ($data['equipment_accidents'] as $accident) {
             $sheet->setCellValue('A' . $row, date('d-m-Y', strtotime($accident['date'])));
             $sheet->setCellValue('B' . $row, $accident['act_number']);
@@ -406,6 +446,14 @@ class EquipmentsController extends Controller
             $sheet->setCellValue('E' . $row, $accident['downtime']);
             $sheet->setCellValue('F' . $row, $accident['measures']);
             $sheet->getStyle('A' . $row . ':F' . $row)->applyFromArray($styleArray);
+
+            if ($row % 2 === 0) {
+                $sheet->getStyle('A' . $row . ':M' . $row)->getFill()
+                    ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                    ->getStartColor()
+                    ->setARGB('d6d8da');
+            }
+
             $row++;
         }
 
@@ -413,7 +461,17 @@ class EquipmentsController extends Controller
         $fileName = 'equipments_N' . $data['id'] . '.xlsx';
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'. urlencode($fileName).'"');
-        $writer->save('php://output');
+
+        $filePath = config('paths.storage_path') . '/tmp/equipment_rep_' . date('Y-m-d') . '.xlsx';
+
+        $writer->save($filePath);
+
+        return response()->json([
+            'data' => [
+                'uri' => '/files/' . str_replace(config('paths.storage_path'), '', $filePath),
+            ],
+            'meta' => []
+        ]);
     }
 
     function setHours($hours)

@@ -7,6 +7,7 @@ use Illuminate\Notifications\Notifiable;
 use App\Observers\AuthObserver;
 use Porabote\Auth\Auth;
 
+// TODO Delete this model
 class Comment extends Model
 {
     public $timestamps = false;

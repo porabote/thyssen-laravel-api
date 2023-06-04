@@ -22,14 +22,14 @@ class BusinessRequests extends Model
     public function comments()
     {
         return $this->hasMany(Comment::class, 'record_id', 'id' )
-            ->whereIn('class_name', ['App.BusinessRequests', 'BusinessRequests'])
+            ->whereIn('class_name', ['App.BusinessRequests', 'BusinessRequests','PaymentsRequests'])
             ->orderBy('parent_id')
             ->orderByDesc('id');
     }
 
     public function object()
     {
-        return $this->belongsTo(ObjectsLocal::class, 'object_id', 'id' );
+        return $this->belongsTo(Objects::class, 'object_id', 'id' );
     }
 
     public function initator()

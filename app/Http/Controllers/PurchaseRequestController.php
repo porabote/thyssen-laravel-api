@@ -8,16 +8,31 @@ use App\Models\File;
 use Porabote\FullRestApi\Server\ApiTrait;
 use Porabote\Uploader\Uploader;
 use App\Models\History;
+use App\Models\HistoryLocal;
 use App\Models\Comment;
 use App\Models\Config;
+use App\Models\ApiUsers;
 use App\Http\Components\Mailer\Mailer;
 use App\Http\Components\Mailer\Message;
 use App\Http\Controllers\ObserversController;
+use App\Http\Controllers\AcceptListsController;
 use Porabote\Auth\Auth;
+use App\Http\Components\AccessLists;
+use App\Http\Controllers\PurchaseNomenclaturesController;
 
 class PurchaseRequestController extends Controller
 {
     use ApiTrait;
+
+    static $authAllows;
+    private $authData = [];
+
+    function __construct()
+    {
+        self::$authAllows = [
+            'getWidjetData',
+        ];
+    }
 
     function addComment(Request $request)
     {
@@ -50,26 +65,32 @@ class PurchaseRequestController extends Controller
         $data['user'] = $record->user->getAttributes();
         $data['status'] = $record->status->getAttributes();
         $data['initator'] = ($record->initator) ? $record->initator->getAttributes() : [];
-        $data['object'] = $record->object->getAttributes();
+        $data['object'] = ($record->object) ? $record->object->getAttributes() : [];
 
         return $data;
     }
 
     /*
-  * ACCEPT LIST
-  * */
+     * ACCEPT LIST
+     * */
     function getAcceptListMode($request)
     {
         $data = $request->all();
-        $record = Certificates::find($data['foreignKey']);
+        $record = PurchaseRequest::with('steps.acceptor')->find($data['foreignKey'])->toArray();
 
-        $mode = (in_array($record->status_id, ['36', '39']))  ? 'building' : 'signing';
+        $mode = (in_array($record['status_id'], ['1', '2']))  ? 'building' : 'signing';
         $isCanChangeAcceptor = AccessLists::_check(10);
+
+
+        $isCanAccept = false;
+        $nextSignerId = AcceptListsController::getNextSigner($record['steps']);
+        if ($nextSignerId) $isCanAccept = AcceptListsController::_checkIsCanAccept($nextSignerId);
 
         return response()->json([
             'data' => [
                 'mode' => $mode,
                 'isCanChangeAcceptor' => $isCanChangeAcceptor,
+                'isCanAccept' => $isCanAccept,
             ],
             'meta' => []
         ]);
@@ -94,35 +115,55 @@ class PurchaseRequestController extends Controller
 
     function setAcceptorsCallback($id)
     {
-        $record = Certificates::with('steps')->find($id);
+        $record = PurchaseRequest::with('steps')->find($id);
 
         $isAllAccepted = true;
+        $acceptor = null;
         foreach($record['steps'] as $step) {
             if (!$step['acceptor']['accepted_at']) {
                 $isAllAccepted = false;
+                $acceptor = $step['acceptor'];
                 break;
             }
         }
 
         if ($isAllAccepted) {
-            $record->status_id = 38;
+            $record->status_id = 13;
+            $record->who_sign_queue_id = null;
             $record->update();
+
+            PurchaseNomenclaturesController::_isChangeRequestStatus($record->id);
+
             return $this->notifyAboutAccepting($id);
         } else {
-            $record->status_id = 37;
+            $record->status_id = 3;
+            $record->who_sign_queue_id = $acceptor['user_id'];
             $record->update();
+
+            PurchaseNomenclaturesController::_isChangeRequestStatus($record->id);
+
+            HistoryLocal::create([
+                'model_alias' => 'PurchaseRequest',
+                'record_id' => $record->id,
+                'label' => 'acceptListSaved',
+                'msg' => 'Подпись лист сформирован и сохранён.'
+            ]);
+
             return $this->notifyNextSigner($id);
         }
     }
 
     function declineStepCallback($id, $data)
     {
-        $record = Certificates::find($id);
-        $record->status_id = 39;
+        $record = PurchaseRequest::find($id);
+        $record->status_id = 2;
+        $record->who_sign_queue_id = null;
         $record->update();
 
+        PurchaseNomenclaturesController::_isChangeRequestStatus($record->id);
+
         HistoryLocal::create([
-            'model_alias' => 'Certificates',
+            'model_alias' => 'PurchaseRequest',
             'record_id' => $record->id,
             'msg' => 'Подпись отклонена. Причина: ' . $data['comment']
         ]);
@@ -132,7 +173,10 @@ class PurchaseRequestController extends Controller
 
     function notifyNextSigner($id)
     {
-        $data = Certificates::with('steps.acceptor.api_user')
+        $data = PurchaseRequest::with('steps.acceptor.api_user')
+            ->with('object')
+            ->with('initator')
+            ->with('status')
             ->with('user')
             ->find($id)
             ->toArray();
@@ -152,7 +196,7 @@ class PurchaseRequestController extends Controller
         $message = new Message();
         $message
             ->setData($data)
-            ->setTemplateById(18);
+            ->setTemplateById(12);
 
         Mailer::setTo([
             [$nextSigner['email']]
@@ -162,8 +206,11 @@ class PurchaseRequestController extends Controller
 
     function notifyAboutAccepting($id)
     {
-        $data = Certificates::with('steps.acceptor.api_user')
+        $data = PurchaseRequest::with('steps.acceptor.api_user')
             ->with('user')
+            ->with('object')
+            ->with('initator')
+            ->with('status')
             ->find($id)
             ->toArray();
         $data['record'] = $data;
@@ -178,7 +225,7 @@ class PurchaseRequestController extends Controller
         $message = new Message();
         $message
             ->setData($data)
-            ->setTemplateById(20);
+            ->setTemplateById(13);
 
         Mailer::setTo($recipients);
         Mailer::send($message);
@@ -186,7 +233,10 @@ class PurchaseRequestController extends Controller
 
     function notifyAboutDeclining($id, $dataRequest)
     {
-        $data = Certificates::with('steps.acceptor.api_user')
+        $data = PurchaseRequest::with('steps.acceptor.api_user')
+            ->with('object')
+            ->with('initator')
+            ->with('status')
             ->with('user')
             ->find($id)
             ->toArray();
@@ -204,7 +254,7 @@ class PurchaseRequestController extends Controller
         $message = new Message();
         $message
             ->setData($data)
-            ->setTemplateById(19);
+            ->setTemplateById(14);
 
         Mailer::setTo($recipients);
         Mailer::send($message);
@@ -212,16 +262,57 @@ class PurchaseRequestController extends Controller
 
     function changeAcceptorCallback($id, $data)
     {
+        $record = PurchaseRequest::with('steps.acceptor.api_user')
+            ->find($id);
+
+        $isAllAccepted = true;
+        $acceptor = null;
+        foreach($record['steps'] as $step) {
+            if (!$step['acceptor']['accepted_at']) {
+                $isAllAccepted = false;
+                $acceptor = $step['acceptor'];
+                break;
+            }
+        }
+        if (!$isAllAccepted) {
+            $record->department_now_id = $acceptor['api_user']['department_id'];
+            $record->who_sign_queue_id = $acceptor['user_id'];
+            $record->update();
+        }
+
         HistoryLocal::create([
-            'model_alias' => 'Certificates',
+            'model_alias' => 'PurchaseRequest',
             'record_id' => $id,
             'msg' => 'Изменён подписант с ' . $data['oldStep']['acceptor']['api_user']['name'] . ' на ' .$data['newStep']['acceptor']['api_user']['name']
         ]);
 
         $this->notifyNextSigner($id);
     }
-    /*
-     * ACCEPT LIST
-     * */
+
+    function getWidjetData()
+    {
+        $users = AccessLists::_get(3);
+
+        $users = ApiUsers::whereIn('id', $users)
+           // ->with('Avatar')
+            ->get()
+            ->toArray();
+
+        $requests = PurchaseRequest::where('status_id', 4)
+            ->with('nomenclatures.manager')
+            ->with('nomenclatures.status')
+            ->with('steps.acceptor')
+            ->get()
+            ->toArray();
+
+        return response()->json([
+            'data' => [
+                'users' => $users,
+                'requests' => $requests
+            ],
+            'meta' => []
+        ]);
+
+    }
 
 }

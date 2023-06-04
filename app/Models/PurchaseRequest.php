@@ -35,17 +35,17 @@ class PurchaseRequest extends Model
 
     public function object()
     {
-        return $this->belongsTo(ObjectsLocal::class, 'object_id', 'id' );
+        return $this->belongsTo(Departments::class, 'object_id', 'id' );
     }
 
     public function initator()
     {
-        return $this->belongsTo(Posts::class, 'initator_id', 'id' );
+        return $this->belongsTo(ApiUsers::class, 'initator_id', 'id' );
     }
 
     public function user()
     {
-        return $this->belongsTo(Posts::class, 'user_id', 'id' );
+        return $this->belongsTo(ApiUsers::class, 'user_id', 'id' );
     }
 
     public function status()
@@ -53,4 +53,17 @@ class PurchaseRequest extends Model
         return $this->belongsTo(Statuses::class, 'status_id', 'id' );
     }
 
+    public function steps()
+    {
+        return $this->hasMany(AcceptListsSteps::class, 'foreign_key')
+            ->where('model', 'PurchaseRequest')
+            ->where('account_id', Auth::$user->account_id)
+            ->where('active', '=', 1)
+            ->orderBy('lft');
+    }
+
+    public function nomenclatures()
+    {
+        return $this->hasMany(PurchaseNomenclatures::class, 'request_id');
+    }
 }

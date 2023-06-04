@@ -6,11 +6,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Porabote\Auth\Auth;
 
-class ObjectsLocal extends Model
+class ContractorsCredinform extends Model
 {
-    protected $connection = 'api_mysql';
-    protected $table = "departments";
+    use HasFactory;
+
+    protected $table = 'contractorsNone';
     public $timestamps = false;
+    static public $limit = 1000;
 
     function __construct(array $attributes = [])
     {
@@ -18,10 +20,9 @@ class ObjectsLocal extends Model
         $this->connection = Auth::$user->account_alias . '_mysql';
     }
 
-    public function departments()
-    {
-        return $this->hasMany(DepartmentsLegacy::class, 'department_id', 'id' )
-            ->orderBy('name');
-    }
+//    public function guid()
+//    {
+//        return $this->belongsTo(GuidsSchneider::class, 'guid_schneider_id', 'id' );
+//    }
 
 }

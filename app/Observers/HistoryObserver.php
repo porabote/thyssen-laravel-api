@@ -56,7 +56,7 @@ class HistoryObserver
      * @param  \App\Models\History  $history
      * @return void
      */
-    public function deleted(History $history)
+    public function deleted($record)
     {
         $className = (new \ReflectionClass($record))->getShortName();
         History::create([

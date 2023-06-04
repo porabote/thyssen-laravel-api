@@ -63,7 +63,16 @@ class Message {
 
     public function getAttachments()
     {
-        return null;
+        return $this->attachments;
+    }
+
+    public function setAttachment($name, $path)
+    {
+        $this->attachments[] = [
+            'name' => $name,
+            'path' => $path,
+        ];
+        return $this;
     }
 
     public function setAttachments($files)

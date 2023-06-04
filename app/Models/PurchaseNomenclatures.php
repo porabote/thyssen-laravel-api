@@ -12,14 +12,30 @@ class PurchaseNomenclatures extends Model
 
     public $timestamps = false;
 
-    protected $fillable = [
-        //'status_id'
-    ];
-
     function __construct(array $attributes = [])
     {
         parent::__construct($attributes);
         $this->connection = Auth::$user->account_alias . '_mysql';
+    }
+
+    public function request()
+    {
+        return $this->belongsTo(PurchaseRequest::class, 'request_id', 'id' );
+    }
+
+    public function manager()
+    {
+        return $this->belongsTo(ApiUsers::class, 'manager_id', 'id' );
+    }
+
+    public function status()
+    {
+        return $this->belongsTo(Statuses::class, 'status_id', 'id' );
+    }
+
+    public function purchase_request()
+    {
+        return $this->belongsTo(PurchaseRequest::class, 'request_id', 'id' );
     }
 
 }

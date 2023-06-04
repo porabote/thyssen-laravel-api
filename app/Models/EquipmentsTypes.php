@@ -9,6 +9,4 @@ use Illuminate\Notifications\Notifiable;
 class EquipmentsTypes extends Model
 {
     protected $connection = 'dicts_mysql';
-    //protected $table = 'dicts';
-
 }

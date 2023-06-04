@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Observers\AuthObserver;
+use App\Observers\FilesObserver;
 
 class File extends Model
 {
@@ -23,6 +25,7 @@ class File extends Model
         'token',
         'width',
         'height',
+        'size',
         'flag',
         'title',
         'dscr',
@@ -30,7 +33,16 @@ class File extends Model
         'main',
         'model_alias',
         'record_id',
-        'data_s_path'
+        'data_s_path',
+        'account_id',
+        'parent_id',
+        'data_json',
     ];
+
+    public static function boot() {
+        parent::boot();
+        File::observe(AuthObserver::class);
+        File::observe(FilesObserver::class);
+    }
 
 }

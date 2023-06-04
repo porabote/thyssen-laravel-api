@@ -72,7 +72,7 @@ class Equipments extends Model
 
     public function organizations_own()
     {
-        return $this->belongsTo(OrganizationsOwn::class, 'organizations_own_id', 'id' );
+        return $this->belongsTo(Companies::class, 'organizations_own_id', 'id' );
     }
 
     public function type()
@@ -108,6 +108,14 @@ class Equipments extends Model
     public function status_reason()
     {
         return $this->belongsTo(Statuses::class, 'status_reason_id', 'id' );
+    }
+
+    public function cover()
+    {
+        return $this->hasOne(File::class, 'record_id', 'id' )
+            ->where('model_alias', 'Equipments')
+            ->orderByDesc('id')
+            ->where('label', 'cover');
     }
 
 }

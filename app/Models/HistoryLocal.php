@@ -15,7 +15,7 @@ class HistoryLocal extends Model
 
     public static function boot() {
         parent::boot();
-        History::observe(AuthObserver::class);
+        HistoryLocal::observe(AuthObserver::class);
         HistoryLocal::observe(HistoryObserver::class);
     }
 
@@ -32,11 +32,8 @@ class HistoryLocal extends Model
      */
     protected $attributes = [
         'date_created' => '',
+        'user_name' => '',
     ];
-
-//    protected $dates = [
-//        'date_created',
-//    ];
 
     protected $fillable = [
         'date_created',
@@ -44,16 +41,10 @@ class HistoryLocal extends Model
         'record_id',
         'msg',
         'diff',
+        'user_id',
+        'user_name',
+        'label',
     ];
-
-//    public function setDateCreated($value)
-//    {
-//        $this->attributes['date_created'] = date('Y-m-d H:i:s');
-//    }
-//    public function setUpdatedAtAttribute($value)
-//    {
-//        $this->attributes['updated_at'] = date('Y-m-d H:i:s');
-//    }
 
     public static function setDiff($dataBefore, $dataAfter)
     {

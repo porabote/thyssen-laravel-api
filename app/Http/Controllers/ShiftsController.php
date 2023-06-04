@@ -27,12 +27,29 @@ class ShiftsController extends Controller
             $record->update();
 
         } else {
-            debug($data);
             $record = Shifts::create($data);
         }
 
         return response()->json([
             'data' => $record->toArray(),
+            'meta' => []
+        ]);
+    }
+
+    function edit($request)
+    {
+        $data = $request->all();
+
+        $record = Shifts::find($data['id']);
+
+        foreach ($data as $field => $value) {
+            if (array_key_exists($field, $record->getAttributes())) $record->$field = $value;
+        }
+
+        $record->update();
+
+        return response()->json([
+            'data' => $record,
             'meta' => []
         ]);
     }

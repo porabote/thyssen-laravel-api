@@ -14,7 +14,7 @@ class EquipmentsRepairs extends Model
 
     protected $fillable = [
         "equipment_id",
-        "type",
+        "type_id",
         "name",
         "engine_hours",
         "date_at",
@@ -43,6 +43,11 @@ class EquipmentsRepairs extends Model
     public function spares()
     {
         return $this->hasMany(EquipmentsRepairsSpares::class, 'repair_id', 'id' );
+    }
+
+    public function type()
+    {
+        return $this->belongsTo(EquipmentsRepairTypes::class, 'type_id', 'id' );
     }
 
 }

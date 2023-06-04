@@ -130,4 +130,21 @@ class ObserversController extends Controller
 //        ]);
 //    }
 
+    public static function _getByDefault($businessEventId)
+    {
+        $observers = ObserversDefault::where('business_event_id', $businessEventId)
+            ->with('user')
+            ->get()
+            ->toArray();
+
+        $observersList = [];
+        foreach ($observers as $observer)
+            $observersList[$observer['id']] = [
+                'id' => $observer['id'],
+                'user_id' => $observer['user']['id'],
+                'email' => $observer['user']['email'],
+            ];
+        return $observersList;
+    }
+
 }

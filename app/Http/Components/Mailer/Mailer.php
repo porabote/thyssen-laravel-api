@@ -39,7 +39,7 @@ class Mailer
         }
 
     }
-    
+
     static function setToByEventId($event_id, $entity_id)
     {
         $observers = Observers::where('business_event_id', $event_id)
@@ -54,7 +54,7 @@ class Mailer
             $recipient[1] = $observer['name'];
             self::$recipients[] = $recipient;
         }
-     
+
     }
 
     static function setToByDefault($event_id)
@@ -72,11 +72,11 @@ class Mailer
         }
     }
 
-    function clearTo()
+    static function clearTo()
     {
         self::$recipients = [];
     }
-    
+
     public static function send(Message $message)
     {
         try {
@@ -94,15 +94,14 @@ class Mailer
             self::$mail->Body    = $message->getBody();
 
             if ($message->getAttachments()) {
-                foreach ($message->attachments() as $attachment){
+                foreach ($message->getAttachments() as $attachment){
                     self::$mail->addAttachment($attachment['path'], $attachment['name']);
                 }
             }
 
             if (self::$mail->send()) {
-
+                self::clearTo();
                 return true;
-
             } else {
 
             }

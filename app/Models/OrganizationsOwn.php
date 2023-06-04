@@ -10,7 +10,7 @@ use App\Observers\AuthObserver;
 class OrganizationsOwn extends Model
 {
     protected $connection = 'api_mysql';
-    protected $table = 'organizations_own';
+    protected $table = 'companies';
 
     public static $limit = 50;
 

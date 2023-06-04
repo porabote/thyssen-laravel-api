@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Porabote\FullRestApi\Server\ApiTrait;
 use App\Models\Users;
 use App\Models\ApiUsers;
+use App\Models\UsersShiftworkers;
 use App\Http\Components\AccessLists;
 
 class ApiUsersController extends Controller
@@ -73,9 +74,61 @@ class ApiUsersController extends Controller
     function checkEditAccess()
     {
         $isCanEdit = AccessLists::_check(11);
+        $isCanViewTabs = AccessLists::_check(12);
 
         return response()->json([
-            'data' => ['isCanEdit' => $isCanEdit],
+            'data' => [
+                'isCanEdit' => $isCanEdit,
+                'isCanViewTabs' => $isCanViewTabs,
+            ],
+            'meta' => []
+        ]);
+    }
+
+    function attachShiftWorker($request)
+    {
+        $data = $request->all();
+
+        $node = UsersShiftworkers::where('shiftworker_id', $data['shiftworker_id'])
+            ->where('user_id', $data['user_id'])
+            ->get()
+            ->first();
+        if ($node) {
+            return response()->json([
+                'data' => $node,
+                'meta' => []
+            ]);
+        } else {
+            $node = UsersShiftworkers::create($data);
+            $node_rather = UsersShiftworkers::create([
+                'user_id' => $data['shiftworker_id'],
+                'shiftworker_id' => $data['user_id'],
+            ]);
+            return response()->json([
+                'data' => $node,
+                'meta' => []
+            ]);
+        }
+    }
+    
+    function detachShiftWorker($request)
+    {
+        $data = $request->all();
+
+        $node = UsersShiftworkers::where('shiftworker_id', $data['shiftworker_id'])
+            ->where('user_id', $data['user_id'])
+            ->get()
+            ->first();
+        $node->delete();
+
+        $nodeOpposite = UsersShiftworkers::where('shiftworker_id', $data['user_id'])
+            ->where('user_id', $data['shiftworker_id'])
+            ->get()
+            ->first();
+        if ($nodeOpposite) $nodeOpposite->delete();
+
+        return response()->json([
+            'data' => $node,
             'meta' => []
         ]);
     }

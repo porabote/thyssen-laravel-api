@@ -14,13 +14,18 @@ class Tickets extends Model
     public static function boot() {
         parent::boot();
         Tickets::observe(HistoryObserver::class);
-        Tickets::observe(AuthObserver::class);
+        //Tickets::observe(AuthObserver::class);
     }
 
     protected $fillable = [
         'id',
         'type_id',
-        'comment'
+        'comment',
+        'date',
+        'city_from_id',
+        'city_to_id',
+        'user_id',
+        'ticket_request_id',
     ];
 
     public function user()
@@ -36,14 +41,9 @@ class Tickets extends Model
     public function comments()
     {
         return $this->hasMany(Comment::class, 'record_id', 'id' )
-            ->where('class_name', '=', 'tickets')
+            ->where('class_name', '=', 'TicketsRequests')
             ->orderBy('parent_id')
             ->orderByDesc('id');
-    }
-
-    public function type()
-    {
-        return $this->belongsTo(EquipmentsTypes::class, 'type_id', 'id' );
     }
 
     public function files()
@@ -68,5 +68,16 @@ class Tickets extends Model
             ->where('active', '=', 1)
             ->orderBy('lft');
     }
+
+    public function city_from()
+    {
+        return $this->belongsTo(Cities::class, 'city_from_id', 'id' );
+    }
+
+    public function city_to()
+    {
+        return $this->belongsTo(Cities::class, 'city_to_id', 'id' );
+    }
+
 
 }

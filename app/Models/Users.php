@@ -91,4 +91,14 @@ class Users extends Model
         return $this->hasMany(UsersRequests::class, 'user_id', 'id' );
     }
 
+    public function passport()
+    {
+        return $this->hasOne(Passport::class, 'api_id', 'id' );
+    }
+
+    public function passport_foreign()
+    {
+        return $this->hasOne(Passport::class, 'api_id', 'id' );
+    }
+
 }

@@ -14,4 +14,9 @@ class UsersShiftworkers extends Model
         'shiftworker_id',
     ];
 
+    public function user()
+    {
+        return $this->belongsTo(ApiUsers::class, 'shiftworker_id', 'id');
+    }
+
 }

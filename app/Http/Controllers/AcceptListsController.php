@@ -1,14 +1,18 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use App\Models\AcceptLists;
 use App\Models\AcceptListsSteps;
 use App\Models\AcceptListsStepsDefault;
 use App\Models\AcceptListsAcceptors;
+use App\Models\ApiUsers;
+use App\Exceptions\ApiException;
 use Porabote\Auth\Auth;
 use Carbon\Carbon;
 
-class AcceptListsController extends Controller {
+class AcceptListsController extends Controller
+{
 
     static $authAllows;
 
@@ -18,7 +22,8 @@ class AcceptListsController extends Controller {
             'getStepsBydefault',
             'getSteps',
             'deleteStep',
-            'changeAcceptor'
+            'changeAcceptor',
+            'checkIsCanAccept'
         ];
     }
 
@@ -40,7 +45,7 @@ class AcceptListsController extends Controller {
             ->toArray();
 
         $order = 1;
-        foreach($steps as $step) {
+        foreach ($steps as $step) {
             self::_addStep([
                 'foreign_key' => $foreignKey,
                 'model' => $model,
@@ -56,23 +61,36 @@ class AcceptListsController extends Controller {
 
     public function setAcceptors($request)
     {
-        $data = $request->all();
+        try {
+            $data = $request->all();
 
-        foreach($data['steps'] as $step) {
-            // Сохраняем акцепторов только для дефолтных шагов
-            if ($step['step_default_id'] && $step['user_id']) {
-                AcceptListsAcceptors::create([
-                    'user_id' => $step['user_id'],
-                    'step_id' => $step['id'],
-                    'account_id' => Auth::$user->account_id,
-                ]);
+            if (!count($data['steps'])) {
+                throw new ApiException('Для сохранения, пожалуйста, добавьте шаги.');
             }
-        }
 
-        return response()->json([
-            'data' => $data['steps'],
-            'meta' => []
-        ]);
+            foreach ($data['steps'] as $step) {
+                if (!$step['user_id']) throw new ApiException('Пожалуйста укажите подписантов для всех шагов.');
+            }
+
+            foreach ($data['steps'] as $step) {
+                // Сохраняем акцепторов только для дефолтных шагов
+                if ($step['step_default_id']) {
+                    AcceptListsAcceptors::create([
+                        'user_id' => $step['user_id'],
+                        'step_id' => $step['id'],
+                        'account_id' => Auth::$user->account_id,
+                    ]);
+                }
+            }
+
+            return response()->json([
+                'data' => $data['steps'],
+                'meta' => []
+            ]);
+
+        } catch (ApiException $e) {
+            $e->toJSON();
+        }
     }
 
     public function addStep($request)
@@ -142,11 +160,22 @@ class AcceptListsController extends Controller {
         ]);
     }
 
+//    function tmp()
+//    {
+//        $steps = AcceptListsSteps::where('model', 'purchase_request')
+//            ->get();
+//       foreach ($steps as $step) {
+//           $step->model = 'PurchaseRequest';
+//           $step->update();
+//       }
+//    }
+
     static function _getSteps($foreignKey, $model)
     {
         return AcceptListsSteps::orderBy('lft', 'asc')
             ->where('foreign_key', $foreignKey)
             ->where('model', $model)
+            ->where('account_id', Auth::$user->account_id)
             ->where('active', 1)
             ->with('acceptor.api_user')
             ->with('default_step.default_users.api_user')
@@ -201,8 +230,10 @@ class AcceptListsController extends Controller {
             ->get();
 
         foreach ($steps as $step) {
-            $step->acceptor->accepted_at = null;
-            $step->acceptor->update();
+            if ($step->acceptor) {
+                $step->acceptor->accepted_at = null;
+                $step->acceptor->update();
+            }
         }
 
         return response()->json([
@@ -223,6 +254,43 @@ class AcceptListsController extends Controller {
             'data' => $step->toArray(),
             'meta' => []
         ]);
+    }
+
+    function getStepsBydefault(){}
+
+    
+    static function getNextSigner($steps)
+    {
+        $acceptorId = null;
+        foreach($steps as $step) {
+            if (!$step['acceptor']['accepted_at']) {
+                $isAllAccepted = false;
+                $acceptorId = $step['acceptor']['user_id'];
+                break;
+            }
+        }
+
+        return $acceptorId;
+    }
+
+    /*
+     * Проверка кто может акцепнтовывать шаг, включая сменьщиков
+     * */
+    static function _checkIsCanAccept($nextAcceptor)
+    {
+        $user = ApiUsers::with('shiftworkers')->find(2)->toArray();//Auth::$user->id
+
+        if ($nextAcceptor == Auth::$user->id) {
+            return true;
+        }
+
+        foreach ($user['shiftworkers'] as $userShift) {
+            if ($nextAcceptor == $userShift['shiftworker_id']) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 }

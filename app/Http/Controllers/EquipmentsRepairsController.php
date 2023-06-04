@@ -12,7 +12,17 @@ use App\Http\Controllers\SparesController;
 class EquipmentsRepairsController extends Controller
 {
     use ApiTrait;
-    
+
+//    static $authAllows;
+//    private $authData = [];
+//
+//    function __construct()
+//    {
+//        self::$authAllows = [
+//            'tmp_retypes'
+//        ];
+//    }
+
     function add($request)
     {
         $data = $request->all();
@@ -75,4 +85,13 @@ class EquipmentsRepairsController extends Controller
             'meta' => []
         ]);
     }
+
+//    function tmp_retypes()
+//    {
+//        $recs = EquipmentsRepairs::get();
+//        foreach ($recs as $rec) {
+//            $rec->type_id = ($rec->type_old == 'repair') ? 1 : 2;
+//            $rec->update();
+//        }
+//    }
 }

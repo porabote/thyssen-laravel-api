@@ -20,6 +20,7 @@ use Porabote\FullRestApi\Server\ApiTrait;
 use App\Exceptions\ApiException;
 use Porabote\Curl\Curl;
 use App\Http\Components\AccessLists;
+use App\Http\Controllers\PassportsController;
 
 class UsersController extends Controller
 {
@@ -35,7 +36,9 @@ class UsersController extends Controller
             'setToken',
             'confirmInvitation',
             'sendInvitationNotification',
-             'migrationPosts'
+            'migrationPosts',
+            'removeUserFromObserversLists',
+            'tmp_export_workers'
         ];
     }
 
@@ -87,22 +90,22 @@ class UsersController extends Controller
 
     }
 
-    function authInLegasyApp($data)
-    {
-        $curl = new Curl();
-        $curl->setData([
-            'username' => $data['username'],
-            'password' => $data['password'],
-            'account_alias' => $data['account_alias']
-        ]);
-
-        $response = $curl->post('https://thyssen24.ru/users/login');
-        $response = json_decode($response['response'], true);
-
-        setcookie('dur', $response['session_id'], time()+3600*720, "/", "api.thyssen24.ru", 1);
-
-        return $response;
-    }
+//    function authInLegasyApp($data)
+//    {
+//        $curl = new Curl();
+//        $curl->setData([
+//            'username' => $data['username'],
+//            'password' => $data['password'],
+//            'account_alias' => $data['account_alias']
+//        ]);
+//
+//        $response = $curl->post('https://thyssen24.ru/users/login');
+//        $response = json_decode($response['response'], true);
+//
+//        setcookie('dur', $response['session_id'], time()+3600*720, "/", "api.thyssen24.ru", 1);
+//
+//        return $response;
+//    }
 
     function setToken(Request $request)
     {
@@ -173,12 +176,21 @@ class UsersController extends Controller
 
         $data = $request->all();
 
+        $status = null;
         if ($data['status']) {
             $this->addAccess($data['aco_id'], $data['aro_id']);
+            $status = 'Added';
         } else {
             $this->deleteAccess($data['aco_id'], $data['aro_id']);
+            $status = 'Deleted';
         }
 
+        return response()->json([
+            'data' => [
+                'status' => $status,
+            ],
+            'meta' => []
+        ]);
     }
 
     function addAccess($aco_id, $aro_id)
@@ -202,13 +214,12 @@ class UsersController extends Controller
 
     function deleteAccess($aco_id, $aro_id)
     {
-        $permission = AclPermissions::get()
+        $permissions = AclPermissions::get()
             ->where('aco_id', $aco_id)
-            ->where('aro_id', $aro_id)
-            ->first();
+            ->where('aro_id', $aro_id);
         // $perm = AclPermissions::find($permission['id']);
 
-        if ($permission) {
+        foreach ($permissions as $permission) {
             $permission->delete();
         }
     }
@@ -224,6 +235,9 @@ class UsersController extends Controller
             
             $user = self::_createUser($data);
             $aro = self::_createAro($user->id);
+
+            PassportsController::_addPassport($user->id);
+            PassportsController::_addForeignPassport($user->id);
 
             $this->_setPermissionsByDefault($aro->id);
 
@@ -268,6 +282,10 @@ class UsersController extends Controller
 
             $user->update();
 
+            if ($user->status == 'fired') {
+                $this->_resetPassword($user->id);
+            }
+
             return response()->json([
                 'data' => $user->toArray(),
                 'meta' => []
@@ -276,6 +294,13 @@ class UsersController extends Controller
         } catch (ApiException $e) {
             $e->toJSON();
         }
+    }
+
+    private function _resetPassword($id)
+    {
+        $user = ApiUsers::find($id);
+        $user->password = 'fired__' . $user->password . '__' . bin2hex(random_bytes(18));
+        $user->update();
     }
 
     private function _createAro($user_id)
@@ -298,6 +323,13 @@ class UsersController extends Controller
 
         if (!$user) {
 
+            $checkOnEmpty = false;
+            foreach ($data as $field => $value) {
+                if (empty($value) && !in_array($field, ['patronymic'])) {
+                    throw new ApiException('Заполнены не все поля' . $field);
+                }
+            }
+
             $user = [
                 'email' => $data['email'],
                 'name' => $data['last_name'] . ' ' . $data['name'],
@@ -305,7 +337,6 @@ class UsersController extends Controller
                 'patronymic' => $data['patronymic'],
                 'post_name' => $data['post_name'],
                 'department_id' => $data['department_id'],
-                'status' => 'invited',
                 'token' => self::createToken(),
                 'password' => null,
                 'role_id' => 2,
@@ -346,9 +377,9 @@ class UsersController extends Controller
             ->toArray();
 
 
-        $user = new \stdClass();
-        $user->account_alias = 'Thyssen';//Thyssen   Solikamsk
-        \Porabote\Auth\Auth::setUser($user);
+//        $user = new \stdClass();
+//        $user->account_alias = 'Thyssen';//Thyssen   Solikamsk
+//        \Porabote\Auth\Auth::setUser($user);
 
         $message = new Message();
         $message->setData($msgData)->setTemplateById(9);
@@ -359,6 +390,11 @@ class UsersController extends Controller
             'data' => $msgData,
             'meta' => []
         ]);
+    }
+
+    function removeUserFromObserversLists()
+    {
+
     }
 
     function confirmInvitation($request)
@@ -372,6 +408,10 @@ class UsersController extends Controller
 
             if (!isset($request->token) || $request->token != $data['token']) {
                 throw new ApiException('Извините, токен уже был использован.');
+            }
+
+            if ($request->user->status == 'fired') {
+                throw new ApiException('Извините, Вы отмечены как уволенный сотрудник, изменение пароля невозможно.');
             }
 
             $userRequest = $request->toArray();
@@ -540,6 +580,112 @@ class UsersController extends Controller
 //       // debug($newValues);
 //        $configs->value = serialize($newValues);
 //       // $configs->update();
+
+    }
+
+    function tmp_export_workers0()
+    {
+//        $path = '/var/www/www-root/data/www/api.v2.thyssen24.ru/storage/export/shifts.xlsx';
+//        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($path);
+//        $sheet = $spreadsheet->getActiveSheet();
+//
+//        for ($i = 3; $i <= 218; $i++) {
+//
+//            $fio = explode(' ', $sheet->getCell('B' . $i)->getValue());
+//            if (!isset($fio[2])) $fio[2] = '';
+//            $shifts = [
+//                1 => 32,
+//                2 => 33,
+//                3 => 34
+//            ];
+//
+//            $cities = \App\Models\Cities::get()->toArray();
+//            foreach($cities as $city) {
+//                $cit[$city['name_ru']] = $city['id'];
+//            }
+//
+//            $user = [
+//                'email' => \Porabote\Stringer\Stringer::transcript("fake_$fio[0]@@@@@@email.ru"),
+//                'name' => $fio[0] . ' ' . $fio[1],
+//                'last_name' => $fio[0],
+//                'patronymic' => $fio[2],
+//                'city_id' => (isset($cit[$sheet->getCell('E' . $i)->getValue()])) ? $cit[$sheet->getCell('E' . $i)->getValue()] : null,
+//                'shift_id' => $shifts[$sheet->getCell('D' . $i)->getValue()],
+//                'post_name' => $sheet->getCell('C' . $i)->getValue(),
+//                'department_id' => 94,
+//               // 'token' => self::createToken(),
+//                'password' => null,
+//                'role_id' => 2,
+//            ];
+           // ApiUsers::create($user);
+//            $passport = [
+//                'type' => 'foreign',
+//            ];
+           // debug( $user);
+            //return ApiUsers::create($user);
+       // }
+//        $users = ApiUsers::with('passport')->get()->toArray();
+//        foreach ($users as $user) {
+//            if(empty($user['passport'])) {
+//
+//                $fi = explode(' ', $user['name']);
+//             //   debug($fi);
+//                $passport = [
+//                    'type' => 'russian',
+//                    'user_id' => $user['id'],
+//                    'name' => $fi[1],
+//                    'last_name' => $fi[0],
+//                    'patronymic' => $user['patronymic'],
+//                ];
+//                //debug($passport);
+//               // \App\Models\Passport::create($passport);
+//            }
+//        }
+    }
+
+    function tmp_export_workers()
+    {
+
+
+        $users = ApiUsers::with('passport')->get()->toArray();
+        $us_pass = [];
+        foreach ($users as $user) {
+            if ($user['passport']) {
+                $us_pass[$user['name'] . ' '. $user['patronymic']] = $user['passport']['id'];
+            }
+        }
+      //  debug($us_pass);
+
+        $path = '/var/www/www-root/data/www/api.v2.thyssen24.ru/storage/export/pass.xlsx';
+        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($path);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        $passports = [];
+        for ($i = 2; $i <= 349; $i++) {
+            $date_issue = $sheet->getCell('F' . $i)->getValue();
+            $date_issue = new \DateTime($date_issue);
+            $date_issue = $date_issue->format('Y-m-d');
+
+            $passports[$sheet->getCell('B' . $i)->getValue()] = [
+                'sery' => str_replace(' ', '', $sheet->getCell('D' . $i)->getValue()),
+                'number' => $sheet->getCell('E' . $i)->getValue(),
+                //'date_birth' => '',
+                'date_of_issue' => $date_issue,
+            ];
+        }
+
+        foreach ($passports as $userName => $passport) {
+
+            if (isset($us_pass[$userName])) {
+
+                $passportU = \App\Models\Passport::find($us_pass[$userName]);
+                foreach ($passport as $field => $value) {
+                    $passportU->$field = $value;
+                }
+               // $passportU->update();
+            }
+        }
+
 
     }
 }

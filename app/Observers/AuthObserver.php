@@ -4,7 +4,6 @@ namespace App\Observers;
 
 use Porabote\Auth\Auth;
 
-
 class AuthObserver
 {
     /**
@@ -16,11 +15,11 @@ class AuthObserver
     public function creating($model)
     {
         $attrs = $model->getOriginal();
+        $fillable = array_flip($model->getFillable());
 
         $model->user_id = Auth::getUser('id');
-
         if (array_key_exists('user_name', $attrs)) $model->user_name = Auth::getUser('name');
-
+        if (array_key_exists('account_id', $fillable)) $model->account_id = Auth::getUser('account_id');
         if (array_key_exists('date_created', $attrs)) $model->date_created = date("Y-m-d H:i:s");
 
     }
@@ -42,10 +41,10 @@ class AuthObserver
      * @param  \App\Models\Auth  $auth
      * @return void
      */
-    public function deleted(Auth $auth)
-    {
-        //
-    }
+//    public function deleted(Auth $auth)
+//    {
+//        //
+//    }
 
     /**
      * Handle the Auth "restored" event.

@@ -17,6 +17,7 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+Route::post('/chat', [ App\Http\Controllers\Chat\ClientController::class, 'calculate' ]);
 Route::get('/porabote/tests/event/', [ App\Http\Controllers\PoraboteController::class, 'event' ]);
 Route::get('/mailer/sendTest/', [ App\Http\Controllers\MailerController::class, 'sendTest' ]);
 Route::get('/api-users/update/', [ App\Http\Controllers\ApiUsersController::class, 'update' ]);

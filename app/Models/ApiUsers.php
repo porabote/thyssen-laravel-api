@@ -14,6 +14,7 @@ class ApiUsers extends Model
      * @var string
      */
     protected $table = 'users';
+    static public $limit = 1000;
 
     protected $fillable = [
         'email',
@@ -28,6 +29,7 @@ class ApiUsers extends Model
         'shift_id',
         'sex',
         'date_birth',
+        'city_id',
     ];
 
     static public $allowed_attributes = [
@@ -44,6 +46,7 @@ class ApiUsers extends Model
         'date_birth',
         'phone',
         'sex',
+        'city_id',
     ];
 
     protected $hidden = [
@@ -96,4 +99,28 @@ class ApiUsers extends Model
         return $this->belongsTo(Shifts::class, 'shift_id', 'id');
     }
 
+    public function shiftworkers()
+    {
+        return $this->hasMany(UsersShiftworkers::class, 'user_id', 'id');
+    }
+
+    public function passport()
+    {
+        return $this->hasOne(Passport::class, 'user_id', 'id' )
+            ->where('type', 'russian');
+    }
+
+    public function passport_foreign()
+    {
+        return $this->hasOne(Passport::class, 'user_id', 'id' )
+            ->where('type', 'foreign');
+    }
+
+    public function facsimiles()
+    {
+        return $this->hasMany(Files::class, 'record_id', 'id')
+            ->where('model_alias', 'Users')
+            ->where('label', 'facsimile')
+            ->where('flag', 'on');
+    }
 }
